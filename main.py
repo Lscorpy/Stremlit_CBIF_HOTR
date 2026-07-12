@@ -83,36 +83,47 @@ def build_deploy_args():
     args.device = DEVICE
     return args
 
+import psutil
+import os as _os
+
+def log_mem(stage):
+    mb = psutil.Process(_os.getpid()).memory_info().rss / 1e6
+    print(f"[MEM] {stage}: {mb:.1f} MB", flush=True)
 
 @app.on_event("startup")
 def load_model_on_startup():
     global MODEL, POSTPROCESSOR
+    log_mem("startup begin")
 
     weights_path = hf_hub_download(
         repo_id="Lscropy/CBIF-HOTR",
         filename="CBIF_HOTR_quantized.pth",
         token=os.environ.get("HF_TOKEN"),
     )
+    log_mem("after HF download")
 
     args = build_deploy_args()
     model, _, postprocessor = build_model(args)
     model.to(DEVICE)
+    log_mem("after build_model (fp32 shell)")
 
     quantized_model = quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8)
     del model
     gc.collect()
+    log_mem("after quantize + del fp32")
 
     state = torch.load(weights_path, map_location=DEVICE, mmap=True)
     quantized_model.load_state_dict(state)
     del state
     gc.collect()
+    log_mem("after load_state_dict")
 
     quantized_model.eval()
-    torch.set_num_threads(1)  # free tier has only 0.1 CPU — avoid thread pool overhead
+    torch.set_num_threads(1)
 
     MODEL = quantized_model
     POSTPROCESSOR = postprocessor
-    print("[startup] Model loaded and ready.")
+    log_mem("startup complete")
 
 
 @app.get("/health")
