@@ -1,3 +1,21 @@
+import psutil, os
+def log_mem(stage):
+    print(f"[MEM] {stage}: {psutil.Process(os.getpid()).memory_info().rss/1e6:.1f} MB", flush=True)
+
+log_mem("before any imports")
+import torch
+log_mem("after torch")
+import torchvision
+log_mem("after torchvision")
+import cv2
+log_mem("after cv2")
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+log_mem("after matplotlib")
+from fastapi import FastAPI, File, UploadFile
+log_mem("after fastapi")
+
 import string
 import numpy as np
 
@@ -40,7 +58,7 @@ import os
 import io
 import base64
 import gc
-import torch
+# import torch
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import JSONResponse
 from PIL import Image
