@@ -95,7 +95,7 @@ def load_model_on_startup():
     )
 
     args = build_deploy_args()
-    model, _, postprocessor = build_model(args)
+    model, postprocessor = build_model(args)
     model.to(DEVICE)
     model = quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8)
 
