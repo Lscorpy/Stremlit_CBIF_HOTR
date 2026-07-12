@@ -100,21 +100,4 @@ COCO_CATEGORIES = [
     {"color": [250, 59, 150], "isthing": 1, "id": 92, "name": "stick"}, ###fa3b96
 ]
 
-def _get_coco_instances_meta():
-    thing_ids = [k["id"] for k in COCO_CATEGORIES if k["isthing"] == 1]
-    # assert len(thing_ids) == 80, f"Length of thing ids : {len(thing_ids)}"
-    assert len(thing_ids) == 82, f"Length of thing ids : {len(thing_ids)}"
 
-    
-    thing_dataset_id_to_contiguous_id = {k: i for i, k in enumerate(thing_ids)}
-    thing_classes = [k["name"] for k in COCO_CATEGORIES if k["isthing"] == 1]
-    thing_colors = [k["color"] for k in COCO_CATEGORIES if k["isthing"] == 1]
-
-    coco_classes = [k["name"] for k in COCO_CATEGORIES]
-
-    return {
-        "thing_dataset_id_to_contiguous_id": thing_dataset_id_to_contiguous_id,
-        "thing_classes": thing_classes,
-        "thing_colors": thing_colors,
-        "coco_classes": coco_classes,
-    }
