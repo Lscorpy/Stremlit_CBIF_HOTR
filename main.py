@@ -39,6 +39,7 @@ def match_person(query_box, person_registry, iou_threshold=0.3):
 import os
 import io
 import base64
+import gc
 import torch
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import JSONResponse
@@ -86,7 +87,6 @@ def build_deploy_args():
 @app.on_event("startup")
 def load_model_on_startup():
     global MODEL, POSTPROCESSOR
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     weights_path = hf_hub_download(
         repo_id="Lscropy/CBIF-HOTR",
@@ -95,15 +95,22 @@ def load_model_on_startup():
     )
 
     args = build_deploy_args()
-    model, postprocessor = build_model(args)
+    model, _, postprocessor = build_model(args)
     model.to(DEVICE)
-    model = quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8)
 
-    state = torch.load(weights_path, map_location=DEVICE)
-    model.load_state_dict(state)
-    model.eval()
+    quantized_model = quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8)
+    del model
+    gc.collect()
 
-    MODEL = model
+    state = torch.load(weights_path, map_location=DEVICE, mmap=True)
+    quantized_model.load_state_dict(state)
+    del state
+    gc.collect()
+
+    quantized_model.eval()
+    torch.set_num_threads(1)  # free tier has only 0.1 CPU — avoid thread pool overhead
+
+    MODEL = quantized_model
     POSTPROCESSOR = postprocessor
     print("[startup] Model loaded and ready.")
 
