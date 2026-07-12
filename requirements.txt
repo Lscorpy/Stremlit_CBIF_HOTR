@@ -6,7 +6,6 @@ torch==2.7.1
 torchvision==0.22.1
 huggingface_hub==0.35.0
 matplotlib==3.10.8
-seaborn==0.13.2
 Pillow==10.3.0
 numpy==2.2.6
 scipy==1.15.3
