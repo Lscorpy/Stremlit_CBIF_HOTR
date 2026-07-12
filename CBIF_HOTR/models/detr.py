@@ -22,9 +22,8 @@ from .unified_postprocess import UnifiedPostProcess
 from .feed_forward import MLP
 
 
-from .CBIF_HOTR_matcher import build_matcher, build_DETR_HHI_matcher, build_HOI_matcher, build_HHI_matcher
 from .CBIF_HOTR import DualBranchModel
-from .CBIF_HOTR_criterion import DualBranchCriterion
+
 
  
 class DETR(nn.Module):
@@ -143,137 +142,10 @@ def build(args):
     
     )
 
-    # ── Matchers ──────────────────────────────────────────────────────────────
-    detr_matcher    = build_matcher(args)         # standard DETR Hungarian matcher
-    human_matcher   = build_DETR_HHI_matcher(args)    # DETR matcher restricted to persons
-    hoi_matcher     = build_HOI_matcher(args)     # HOTR pair matcher (Branch 1)
-    HHI_matcher     = build_HHI_matcher(args)     # HHI pair matcher (Branch 2)
-
-
-# ── Weight dicts ──────────────────────────────────────────────────────────
-    # Shared DETR weights
-    detr_weight_dict = {
-        "loss_ce":   1,
-        "loss_bbox": args.bbox_loss_coef,
-        "loss_giou": args.giou_loss_coef,
-    } if args.freeze_detr else{"loss_ce":   1}
-
-
-    if args.aux_loss:
-        aux_w = {}
-        for i in range(args.dec_layers - 1):
-            aux_w.update({f"{k}_{i}": v for k, v in detr_weight_dict.items()})
-        detr_weight_dict.update(aux_w)
-
-    # Branch 1 (HOI) weights
-    hoi_weight_dict = {
-        "loss_hidx":   args.hoi_idx_loss_coef,
-        "loss_oidx":   args.hoi_idx_loss_coef,
-        "loss_act":    args.hoi_act_loss_coef,
-        "loss_violence":    args.hoi_violence_loss_coef,
-        "loss_hidx_v":    args.hoi_idx_loss_coef,
-        "loss_oidx_v":    args.hoi_idx_loss_coef,
-    }
-
-    if args.hoi_aux_loss:
-        aux_w = {}
-        for i in range(args.HOI_dec_layers-1):
-            aux_w.update({f"{k}_aux_{i}": v for k, v in hoi_weight_dict.items()})
-        hoi_weight_dict.update(aux_w)
-
-
-    hoi_weight_dict.update({
-        f"{k}_anchor": v
-        for k, v in {
-            "loss_hidx":   args.hoi_idx_loss_coef,
-            "loss_oidx":   args.hoi_idx_loss_coef,
-            "loss_act":    args.hoi_act_loss_coef,
-            "loss_violence":  args.hoi_violence_loss_coef,
-            "loss_hidx_v":    args.hoi_idx_loss_coef,
-            "loss_oidx_v":    args.hoi_idx_loss_coef,
-        }.items()
-    })
-
-    
-    
-
-    # Branch 2 (HHI) weights
-    HHI_weight_dict = {
-        "loss_aggressor":   args.HHI_idx_loss_coef,
-        "loss_victim":      args.HHI_idx_loss_coef,
-        "loss_action":      args.HHI_action_idx_loss_coef,
-        "loss_visibility":  args.HHI_idx_loss_coef,
-        "loss_human_bbox":  args.bbox_loss_coef,
-        "loss_human_giou":  args.giou_loss_coef,
-    }
-    
-    if args.HHI_aux_loss:
-        aux_w = {}
-        for i in range(args.HHI_dec_layers-1):   # reuse same depth setting
-            aux_w.update({f"{k}_aux_{i}": v for k, v in HHI_weight_dict.items()})
-        HHI_weight_dict.update(aux_w)
-
-
-    # Anchor (un-fused) supervision weight keys for HHI 
-
-    HHI_weight_dict.update({
-        f"{k}_anchor": v
-        for k, v in {
-            "loss_aggressor":  args.HHI_idx_loss_coef,
-            "loss_victim":     args.HHI_idx_loss_coef,
-            "loss_action":     args.HHI_action_idx_loss_coef,
-            "loss_visibility": args.HHI_idx_loss_coef,
-        }.items()
-    })
-
-
-    # ── Loss lists ────────────────────────────────────────────────────────────
-    base_losses = ["labels", "boxes", "cardinality"] if args.frozen_weights is None else []
-
-    hoi_losses = ["pair_labels", "pair_actions", "pair_violence", "pair_violence_labels"]
-
-    HHI_losses = ["action_HHI", "pointer_HHI", "visibility_HHI"]
-
-    
-
-    # ── Criterion ─────────────────────────────────────────────────────────────
-    criterion = DualBranchCriterion(
-        num_classes       = args.num_classes,
-        detr_matcher      = detr_matcher,
-        human_matcher     = human_matcher,
-        hoi_matcher       = hoi_matcher,
-        HHI_matcher       = HHI_matcher,
-        hoi_weight_dict   = hoi_weight_dict,
-        HHI_weight_dict   = HHI_weight_dict,
-        detr_weight_dict  = detr_weight_dict,
-        eos_coef          = args.eos_coef,
-        detr_losses       = base_losses,
-        hoi_losses        = hoi_losses,
-        HHI_losses        = HHI_losses,
-        anchor_loss_weight = args.anchor_loss_weight,
-        args              = args,
-
-    )
-    criterion.to(device)
 
     postprocessors = UnifiedPostProcess(
         args.HOIDet,
         args.HHIDet,
     )
    
-    # # ── Sanity print ──────────────────────────────────────────────────────────
-    # print("\n" + "=" * 16 + " DUAL-BRANCH INITIALIZATION SANITY CHECK" + "=" * 16)
-    # print(f"  DETR queries       : {args.num_queries}")
-    # print(f"  HOI queries (B1)   : {args.num_hoi_queries}")
-    # print(f"  HOI actions        : {args.num_actions}  |  violence verbs: {args.num_violence_actions}")
-    # print(f"  HHI queries (B2)   : {args.num_HHI_queries}")
-    # print(f"  HHI actions        : {args.num_HHI_action}")
-    # print(f"  CBAF nhead         : {args.cbaf_nhead}  |  gate: {args.cbaf_use_gate}  |  conf_gate: {args.cbaf_use_conf_gate}  |  ffn: {args.cbaf_ffn}")
-    # print(f"  Anchor loss weight : {args.anchor_loss_weight}")
-    # print(f"  HOI losses         : {hoi_losses}")
-    # print(f"  HHI losses         : {HHI_losses}")
-    # print(f"  HOI weight keys    : {list(hoi_weight_dict.keys())}")
-    # print(f"  HHI weight keys    : {list(HHI_weight_dict.keys())}")
-    # print("=" * 50 + "\n")
-    
-    return model, criterion, postprocessors
+    return model, postprocessors
